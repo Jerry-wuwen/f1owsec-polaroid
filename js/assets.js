@@ -66,7 +66,7 @@
       if (!clean.startsWith('./') && !clean.startsWith('../')) {
         clean = `./${clean}`;
       }
-      const ver = CONFIG.ASSET_VERSION || '20261123c';
+      const ver = CONFIG.ASSET_VERSION || '20261123f';
       if (!/[?&]v=/.test(clean)) {
         clean += `${clean.includes('?') ? '&' : '?'}v=${encodeURIComponent(ver)}`;
       }
@@ -294,7 +294,7 @@
               hairKey,
               url,
               slot,
-              priority: Math.min(task.priority, 1),
+              priority: Math.min(task.priority, 0.5),
               seq: this._seqCounter++,
               attempt: nextAttempt
             });
@@ -362,7 +362,7 @@
       const slot = this._normalizeVariant(variant);
       const hairKey = this._resolveHairKey(memberId, hairStyle);
       const key = this._statusKey(memberId, hairKey, slot);
-      const pVal = typeof targetPriority === 'number' ? targetPriority : 1;
+      const pVal = typeof targetPriority === 'number' ? targetPriority : 0.5;
 
       let changed = false;
       this._queue.forEach((task) => {
@@ -381,7 +381,7 @@
       if (!memberId) return;
       const hairKey = this._resolveHairKey(memberId, hairStyle);
       FALLBACK_SLOTS.forEach((slot) => {
-        const p = slot === 'main' ? 1 : 1.5;
+        const p = slot === 'main' ? 0.5 : 0.7;
         if (hairKey) {
           this.prioritizeSlot(memberId, slot, hairKey, p);
         }
@@ -426,15 +426,10 @@
         }
       }
 
-      // P2: 其余 4 位成员主立绘
-      otherMembers.forEach((member) => {
-        this._enqueueSlot(member.id, null, member.spriteUrl, 'main', 2);
-      });
-
-      // P3: 「蓝」默认与短发的其余动作立绘 (pose ~ pose4)
+      // P1 (优先级 1.2): 「蓝」默认与短发全部动作立绘 (pose ~ pose4)，先于其他 4 位成员加载以保证进舞台立即可切动作
       if (firstMember && firstMember.id) {
         SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
-          this._enqueueSlot(firstMember.id, null, firstMember[prop], slot, 3);
+          this._enqueueSlot(firstMember.id, null, firstMember[prop], slot, 1.2);
         });
         if (firstMember.hairVariants && typeof firstMember.hairVariants === 'object') {
           Object.keys(firstMember.hairVariants).forEach((hairKey) => {
@@ -442,16 +437,21 @@
             const hv = firstMember.hairVariants[hairKey];
             if (!hv) return;
             SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
-              this._enqueueSlot(firstMember.id, hairKey, hv[prop], slot, 3);
+              this._enqueueSlot(firstMember.id, hairKey, hv[prop], slot, 1.2);
             });
           });
         }
       }
 
-      // P4: 其余 4 位成员动作立绘及额外发型变体
+      // P2 (优先级 2): 其余 4 位成员主立绘
+      otherMembers.forEach((member) => {
+        this._enqueueSlot(member.id, null, member.spriteUrl, 'main', 2);
+      });
+
+      // P3 (优先级 3): 其余 4 位成员动作立绘及额外发型变体
       SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
         otherMembers.forEach((member) => {
-          this._enqueueSlot(member.id, null, member[prop], slot, 4);
+          this._enqueueSlot(member.id, null, member[prop], slot, 3);
         });
       });
 
@@ -462,7 +462,7 @@
           const hv = member.hairVariants[hairKey];
           if (!hv) return;
           SLOT_CONFIG_PROPS.forEach(([slot, prop], idx) => {
-            this._enqueueSlot(member.id, hairKey, hv[prop], slot, idx === 0 ? 2 : 4);
+            this._enqueueSlot(member.id, hairKey, hv[prop], slot, idx === 0 ? 2 : 3);
           });
         });
       });
