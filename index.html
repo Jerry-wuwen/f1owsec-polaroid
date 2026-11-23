@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0916">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>限时60秒的拍立得 · F1owSec 特典会拍切模拟器</title>
+  <link rel="stylesheet" href="./style.css?v=20261123">
+</head>
+<body>
+  <div id="app" data-member="member_1">
+    <canvas id="stage-canvas" width="540" height="960" aria-label="舞台取景画布"></canvas>
+
+    <!-- Viewfinder Crisp DOM HUD Overlays -->
+    <div id="pose-hud-badge" class="pose-hud-badge" aria-live="polite">[N 待机营业]</div>
+    <button id="btn-framing" class="pixel-btn framing-btn" type="button" title="切换单人景别">全身</button>
+    <button id="btn-hair-toggle" class="pixel-btn hair-toggle-btn" type="button" title="切换蓝的长发/短发造型">发型：长发</button>
+
+    <!-- Group First-Time Top Guide Toast -->
+    <div id="group-guide-toast" class="group-guide-toast hidden" role="status">拖动成员调整站位 · 点击成员可切动作/发型/层级</div>
+
+    <!-- 60s Countdown Soft Timeout Overlay -->
+    <div id="timeout-overlay" class="timeout-overlay hidden" role="alert">
+      <div class="timeout-box">
+        <div class="timeout-msg">Staff：时间到啦~</div>
+        <button id="btn-renew-ticket" class="pixel-btn renew-ticket-btn" type="button">续券</button>
+      </div>
+    </div>
+
+    <!-- Group Quick Member Switch Hint & Name Tabs -->
+    <div id="group-name-hint" class="group-name-hint hidden" role="status">点击名字快速切换</div>
+    <div id="group-member-tabs" class="group-member-tabs hidden" role="tablist" aria-label="快速切换团切成员"></div>
+
+    <!-- Group Free-Posing Studio Micro Toolbar -->
+    <div id="group-studio-bar" class="group-studio-bar hidden" role="toolbar" aria-label="团切摆拍微调工具栏">
+      <span id="grp-selected-name" class="grp-selected-chip">蓝</span>
+      <button id="btn-grp-pose" class="pixel-btn grp-tool-btn" type="button" title="循环切换5张立绘">切动作</button>
+      <button id="btn-grp-hair" class="pixel-btn grp-tool-btn grp-hair-btn" type="button" title="切换长发/短发">换发型</button>
+      <button id="btn-grp-flip" class="pixel-btn grp-tool-btn" type="button" title="左右镜像翻转">镜像</button>
+      <button id="btn-grp-zoom-in" class="pixel-btn grp-tool-btn" type="button" title="放大选中成员">放大</button>
+      <button id="btn-grp-zoom-out" class="pixel-btn grp-tool-btn" type="button" title="缩小选中成员">缩小</button>
+      <button id="btn-grp-top" class="pixel-btn grp-tool-btn" type="button" title="移到最前层">置顶</button>
+      <button id="btn-grp-soul" class="pixel-btn grp-tool-btn grp-soul-btn hidden" type="button" title="35/35全收集特权：循环切换全员比心 / 全员歪头 / 星海应援">团魂定格</button>
+    </div>
+
+    <header class="top-bar">
+      <div class="member-status" aria-live="polite">
+        <span id="member-color-dot" class="color-dot" aria-hidden="true"></span>
+        <div class="member-meta">
+          <span id="member-name-label" class="member-name">蓝</span>
+          <span id="member-color-tag" class="color-tag">蓝色担当</span>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="btn-open-ticket" class="pixel-btn btn-ticket-top" type="button" title="返回入场券修改昵称">改昵称</button>
+
+        <button id="btn-album" class="pixel-btn btn-album" type="button" title="打开本地拍切集邮册">
+          <span class="btn-album-text">相册</span>
+          <span id="album-count-badge" class="album-badge">0</span>
+        </button>
+
+        <button id="btn-bg-switch" class="pixel-btn btn-bg" type="button" title="切换打卡墙背景">
+          <span class="btn-bg-title">换背景</span>
+          <span id="bg-label" class="btn-bg-sub">1/3 赛博墙</span>
+        </button>
+
+        <button id="btn-settings" class="pixel-btn btn-settings" type="button" title="掌机氛围滤镜设置" aria-label="掌机氛围滤镜设置">设置</button>
+
+        <button id="btn-mute" class="pixel-btn pixel-btn-icon" type="button" aria-label="静音开关" aria-pressed="false" title="静音开关">
+          <svg id="icon-sound-on" class="pixel-svg" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <rect x="2" y="6" width="3" height="4" fill="currentColor" />
+            <rect x="5" y="4" width="2" height="8" fill="currentColor" />
+            <rect x="7" y="2" width="2" height="12" fill="currentColor" />
+            <rect x="11" y="5" width="1" height="6" fill="currentColor" />
+            <rect x="13" y="3" width="1" height="10" fill="currentColor" />
+          </svg>
+          <svg id="icon-sound-off" class="pixel-svg hidden" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <rect x="2" y="6" width="3" height="4" fill="currentColor" />
+            <rect x="5" y="4" width="2" height="8" fill="currentColor" />
+            <rect x="7" y="2" width="2" height="12" fill="currentColor" />
+            <rect x="11" y="5" width="1" height="1" fill="#F87171" />
+            <rect x="14" y="5" width="1" height="1" fill="#F87171" />
+            <rect x="12" y="6" width="2" height="4" fill="#F87171" />
+            <rect x="11" y="10" width="1" height="1" fill="#F87171" />
+            <rect x="14" y="10" width="1" height="1" fill="#F87171" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="shutter-zone">
+      <button id="btn-call" class="pixel-btn call-btn" type="button" aria-label="夸夸偶像" title="夸夸偶像，触发开心反应并提升SR/SSR概率">
+        <span class="call-btn-label">♥ 夸夸</span>
+      </button>
+
+      <button id="btn-shutter" class="shutter-btn" type="button" aria-label="按下快门拍立得">
+        <svg class="shutter-icon" viewBox="0 0 16 14" shape-rendering="crispEdges" aria-hidden="true">
+          <rect x="5" y="1" width="6" height="2" fill="#FFFFFF" />
+          <rect x="1" y="3" width="14" height="10" fill="#FFFFFF" />
+          <rect x="2" y="4" width="12" height="8" fill="#991B1B" />
+          <rect x="11" y="5" width="2" height="2" fill="#FACC15" />
+          <rect x="6" y="5" width="4" height="6" fill="#FFFFFF" />
+          <rect x="5" y="6" width="6" height="4" fill="#FFFFFF" />
+          <rect x="7" y="7" width="2" height="2" fill="#1F2937" />
+        </svg>
+        <span class="shutter-label">快门</span>
+      </button>
+
+      <button id="btn-pose-switch" class="pixel-btn pose-switch-btn" type="button" aria-label="切换拍切动作" title="切换动作（小幅提高SR/SSR概率）">
+        <span class="pose-switch-label">换姿势</span>
+        <span id="pose-cooldown-track" class="pose-cooldown-track" aria-hidden="true">
+          <span id="pose-cooldown-fill" class="pose-cooldown-fill" style="width: 0%;"></span>
+        </span>
+      </button>
+    </div>
+
+    <div id="collection-bar" class="collection-bar" aria-label="五人集邮进度">
+      <span id="collection-label" class="collection-label">集邮 0/5</span>
+      <div id="collection-stars" class="collection-stars"></div>
+    </div>
+
+    <nav id="member-bar" class="member-bar" aria-label="切换偶像成员"></nav>
+
+    <!-- Polaroid Studio Modal (Develop + Sticker DIY) -->
+    <div id="preview-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-judgment-badge">
+      <div class="modal-card studio-card">
+        <div class="modal-header-row">
+          <div id="modal-judgment-badge" class="modal-badge">★★★ PERFECT · 应援色限定拍立得</div>
+          <button id="btn-modal-close" class="pixel-btn modal-close-btn" type="button" aria-label="关闭并返回重拍">×</button>
+        </div>
+
+        <div class="polaroid-editor-wrap">
+          <canvas id="polaroid-editor-canvas" width="888" height="1168" aria-label="拍立得显影与贴纸画布"></canvas>
+        </div>
+
+        <!-- Phase 1: Rub / Tap to Develop -->
+        <div id="develop-panel" class="develop-panel">
+          <div id="develop-hint" class="develop-hint">滑动擦拭显影</div>
+          <div class="develop-progress-row">
+            <div class="develop-track">
+              <div id="develop-bar-fill" class="develop-bar-fill" style="width: 0%;"></div>
+            </div>
+            <span id="develop-percent" class="develop-percent">0%</span>
+          </div>
+        </div>
+
+        <!-- Phase 2: Sticker DIY -->
+        <div id="diy-panel" class="diy-panel hidden">
+          <div class="diy-toolbar">
+            <span class="diy-title">宿题贴纸 & To签 DIY</span>
+            <div class="diy-tools">
+              <button id="btn-complete-stamp" class="pixel-btn diy-tool-btn diy-stamp-btn is-on hidden" type="button">全制霸印章</button>
+              <button id="btn-tosign-toggle" class="pixel-btn diy-tool-btn is-on" type="button">To签：开</button>
+              <button id="btn-tosign-color" class="pixel-btn diy-tool-btn" type="button">笔迹：应援色</button>
+              <button id="btn-sticker-undo" class="pixel-btn diy-tool-btn" type="button">撤销</button>
+              <button id="btn-sticker-clear" class="pixel-btn diy-tool-btn" type="button">清空</button>
+            </div>
+          </div>
+
+          <div id="sticker-transform-bar" class="sticker-transform-bar hidden" role="toolbar" aria-label="选中贴纸微调">
+            <button id="btn-stk-rot-l" class="pixel-btn stk-tf-btn" type="button">左转</button>
+            <button id="btn-stk-rot-r" class="pixel-btn stk-tf-btn" type="button">右转</button>
+            <button id="btn-stk-zoom-in" class="pixel-btn stk-tf-btn" type="button">放大</button>
+            <button id="btn-stk-zoom-out" class="pixel-btn stk-tf-btn" type="button">缩小</button>
+            <button id="btn-stk-delete" class="pixel-btn stk-tf-btn stk-tf-del" type="button">删除</button>
+          </div>
+
+          <div id="tosign-transform-bar" class="tosign-transform-bar hidden" role="toolbar" aria-label="To签大小与位置微调">
+            <span class="tosign-tf-tag">To签</span>
+            <button id="btn-tosign-zoom-in" class="pixel-btn stk-tf-btn" type="button">放大</button>
+            <button id="btn-tosign-zoom-out" class="pixel-btn stk-tf-btn" type="button">缩小</button>
+            <button id="btn-tosign-reset" class="pixel-btn stk-tf-btn tosign-tf-reset" type="button">复位</button>
+          </div>
+
+          <div id="sticker-tray" class="sticker-tray" role="toolbar" aria-label="像素贴纸栏"></div>
+
+          <div class="modal-actions-3">
+            <button id="btn-retake" class="pixel-btn modal-btn-secondary" type="button">重新拍摄</button>
+            <button id="btn-save-album" class="pixel-btn modal-btn-album" type="button">保存至相册</button>
+            <button id="btn-export-png" class="pixel-btn modal-btn-primary" type="button">导出图片</button>
+          </div>
+        </div>
+
+        <div id="modal-toast" class="modal-toast hidden" role="status"></div>
+      </div>
+    </div>
+
+    <!-- Local Album & 35-Slot Pose Dex Modal -->
+    <div id="album-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="拍切集邮册">
+      <div class="modal-card album-card">
+        <div class="modal-header-row">
+          <div class="modal-badge album-header-title">拍切集邮册 <span id="album-modal-count">(0张)</span></div>
+          <button id="btn-album-close" class="pixel-btn modal-close-btn" type="button" aria-label="关闭相册">×</button>
+        </div>
+
+        <div class="album-tabs" role="tablist" aria-label="相册模式切换">
+          <button id="tab-album" class="pixel-btn album-tab active" type="button" role="tab" aria-selected="true">我的相册</button>
+          <button id="tab-dex" class="pixel-btn album-tab" type="button" role="tab" aria-selected="false">
+            动作图鉴 <span id="dex-total-badge" class="dex-tab-badge">0/35</span>
+          </button>
+        </div>
+
+        <div id="album-grid" class="album-grid"></div>
+        <div id="album-empty" class="album-empty hidden">
+          暂无拍立得收藏<br>快门抓拍并保存到相册，集齐 F1owSec 5 位成员解锁「全员团切」!
+        </div>
+        <div id="dex-panel" class="dex-panel hidden"></div>
+      </div>
+    </div>
+
+    <!-- Album Detail Lightbox Modal -->
+    <div id="album-detail-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="拍立得大图预览">
+      <div class="modal-card detail-card">
+        <div class="modal-header-row">
+          <div id="album-detail-meta" class="modal-badge">蓝 · ★★★ PERFECT · 2026.11.22</div>
+          <button id="btn-detail-back" class="pixel-btn modal-close-btn" type="button" aria-label="返回相册">×</button>
+        </div>
+
+        <div class="detail-img-wrap">
+          <img id="album-detail-img" src="" alt="拍立得大图">
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-detail-delete" class="pixel-btn modal-btn-danger" type="button">删除此张</button>
+          <button id="btn-detail-download" class="pixel-btn modal-btn-primary" type="button">下载图片</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5-Member Collection Unlock Celebration Modal -->
+    <div id="unlock-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="解锁全员团切">
+      <div class="modal-card unlock-card">
+        <div class="unlock-stars-deco">★ ★ ★ ★ ★</div>
+        <div class="unlock-title">F1owSec 五人集邮达成！</div>
+        <p class="unlock-desc">
+          已集齐全部 5 位成员的拍立得记忆！<br>
+          底部切人栏已解锁发光模式：<strong>「全员团切 · F1owSec 全员集结」</strong><br>
+          专属星光纪念舞台与宽版纪念相纸现已开启！
+        </p>
+        <div class="modal-actions">
+          <button id="btn-unlock-close" class="pixel-btn modal-btn-secondary" type="button">稍后再说</button>
+          <button id="btn-unlock-try" class="pixel-btn modal-btn-primary" type="button">立即体验全员团切</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 35/35 All-Poses-Completed Celebration Modal -->
+    <div id="all-complete-modal" class="modal-overlay all-complete-overlay hidden" role="dialog" aria-modal="true" aria-label="全员制霸纪念">
+      <div class="modal-card all-complete-card">
+        <div class="all-complete-crown">★ 35 / 35 COMPLETE ★</div>
+        <div class="all-complete-title">全员制霸 · 35/35 图鉴全解锁</div>
+        <p class="all-complete-desc">每一个转瞬即逝的镜头里，谢谢你都认真接住了。</p>
+        <div class="all-complete-perks">已解锁特权：团切「团魂定格」· 拍立得「全制霸印章」</div>
+        <button id="btn-all-complete-ok" class="pixel-btn all-complete-btn" type="button">开启全收集特权</button>
+      </div>
+    </div>
+
+    <!-- Lossless Handheld Atmosphere Filters Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="掌机氛围滤镜设置">
+      <div class="modal-card settings-card">
+        <div class="modal-header-row">
+          <div class="modal-badge">掌机氛围滤镜设置</div>
+          <button id="btn-settings-close" class="pixel-btn modal-close-btn" type="button" aria-label="关闭设置">×</button>
+        </div>
+
+        <div class="settings-list">
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">GBA 液晶微扫描线</span>
+              <span class="setting-desc">无损叠加复古掌机横纹扫描线与细微栅格</span>
+            </div>
+            <button id="toggle-filter-scanlines" class="pixel-btn pixel-toggle" type="button" aria-pressed="false">关</button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">赛博冷色调</span>
+              <span class="setting-desc">叠加青蓝冷调舞台滤光，突出冷冽电音氛围</span>
+            </div>
+            <button id="toggle-filter-cyber" class="pixel-btn pixel-toggle" type="button" aria-pressed="false">关</button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">暖色拍立得胶片</span>
+              <span class="setting-desc">叠加暖阳色温与复古胶片柔和暗角</span>
+            </div>
+            <button id="toggle-filter-warm" class="pixel-btn pixel-toggle" type="button" aria-pressed="false">关</button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">舞台柔光</span>
+              <span class="setting-desc">顶光柔和漫射晕影，提亮打歌服与舞台层次</span>
+            </div>
+            <button id="toggle-filter-glow" class="pixel-btn pixel-toggle" type="button" aria-pressed="false">关</button>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-settings-reset" class="pixel-btn modal-btn-secondary" type="button">恢复默认</button>
+          <button id="btn-settings-done" class="pixel-btn modal-btn-primary" type="button">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WeChat / Weibo / QQ / iOS Long-Press Save Modal -->
+    <div id="save-image-modal" class="modal-overlay save-image-overlay hidden" role="dialog" aria-modal="true" aria-label="长按保存高清拍立得">
+      <div class="modal-card save-image-card">
+        <div class="modal-header-row">
+          <div class="modal-badge">长按下方拍立得保存到相册</div>
+          <button id="btn-save-image-close" class="pixel-btn modal-close-btn" type="button" aria-label="关闭保存弹窗">×</button>
+        </div>
+
+        <div class="save-image-hint">长按下方高清图片 1 秒即可保存至手机相册或发送给朋友</div>
+
+        <div class="save-image-wrap">
+          <img id="save-image-preview" src="" alt="拍立得高清成片">
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-save-image-done" class="pixel-btn modal-btn-primary" type="button">关闭保存窗口</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start Screen: Tokutenkai Admission Ticket -->
+    <div id="start-screen" class="start-screen" role="dialog" aria-modal="true" aria-label="特典会入场券">
+      <div class="ticket-card">
+        <div class="ticket-header-tag">★ ADMIT ONE · FLOW ONE SEC ★</div>
+        <h1 class="ticket-title">F1owSec 限时60秒拍立得</h1>
+        <p class="ticket-subtitle">
+          转瞬即逝的此刻<br>
+          与你共同穿行这场大雨
+        </p>
+
+        <div class="ticket-perforation" aria-hidden="true"></div>
+
+        <label class="ticket-input-wrap" for="nickname-input">
+          <input id="nickname-input" class="ticket-input" type="text" maxlength="10" autocomplete="off" placeholder="输入你的昵称（用于拍立得 To 签，可留空）">
+        </label>
+
+        <button id="btn-enter-ticket" class="pixel-btn ticket-enter-btn" type="button">检票入场</button>
+        <div class="ticket-guide-text">昵称可留空 · 进度与相册自动保存在本机</div>
+      </div>
+    </div>
+
+    <div id="global-toast" class="global-toast hidden" role="status"></div>
+  </div>
+
+  <script src="./js/config.js?v=20261123"></script>
+  <script src="./js/audio.js?v=20261123"></script>
+  <script src="./js/pixelFilter.js?v=20261123"></script>
+  <script src="./js/assets.js?v=20261123"></script>
+  <script src="./js/poses.js?v=20261123"></script>
+  <script src="./js/stickers.js?v=20261123"></script>
+  <script src="./js/album.js?v=20261123"></script>
+  <script src="./js/main.js?v=20261123"></script>
+</body>
+</html>
