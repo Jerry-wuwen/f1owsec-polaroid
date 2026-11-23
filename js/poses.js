@@ -447,8 +447,10 @@
 
       this.currentPose = nextPose;
       if (Array.isArray(nextPose.spriteSlots) && nextPose.spriteSlots.length > 0) {
-        // 凑近对视：优先切到 pose1 (~65%) / 主立绘 (~35%)
-        this.activeSpriteSlot = Math.random() < 0.65 ? nextPose.spriteSlots[0] : nextPose.spriteSlots[nextPose.spriteSlots.length - 1];
+        // 凑近对视：简单模式固定主槽位，标准模式优先切到 pose1 (~65%) / 主立绘 (~35%)
+        this.activeSpriteSlot = opts.sequential
+          ? nextPose.spriteSlots[0]
+          : (Math.random() < 0.65 ? nextPose.spriteSlots[0] : nextPose.spriteSlots[nextPose.spriteSlots.length - 1]);
       } else {
         this.activeSpriteSlot = nextPose.spriteSlot || 'main';
       }
@@ -513,13 +515,20 @@
       if (this.manualCooldown > 0) return false;
       this.manualCooldown = this.cooldownDuration;
       const opts = extraOpts || {};
-      const nextPose = pickWeightedPose({
-        boostRare: true,
-        extraRareBoost: this.callRareBoostTimer > 0,
-        excludeId: this.currentPose.id,
-        isLastTenSeconds: Boolean(opts.isLastTenSeconds),
-        uncollectedIds: opts.uncollectedIds || null
-      });
+      let nextPose;
+      if (opts.sequential) {
+        const curIdx = POSE_LIST.findIndex((p) => p.id === (this.currentPose && this.currentPose.id));
+        const nextIdx = curIdx >= 0 ? (curIdx + 1) % POSE_LIST.length : 0;
+        nextPose = POSE_LIST[nextIdx];
+      } else {
+        nextPose = pickWeightedPose({
+          boostRare: true,
+          extraRareBoost: this.callRareBoostTimer > 0,
+          excludeId: this.currentPose.id,
+          isLastTenSeconds: Boolean(opts.isLastTenSeconds),
+          uncollectedIds: opts.uncollectedIds || null
+        });
+      }
       this.setPose(nextPose, member, false, opts);
       return true;
     }
@@ -653,7 +662,7 @@
 
       if (isAiming) {
         this.poseElapsed += dt;
-        if (this.poseElapsed >= this.nextSwitchIn) {
+        if (!ctxOpts.easyMode && this.poseElapsed >= this.nextSwitchIn) {
           const nextPose = pickWeightedPose({
             boostRare: this.callRareBoostTimer > 0,
             extraRareBoost: this.callRareBoostTimer > 0,

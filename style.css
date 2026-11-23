@@ -104,7 +104,9 @@ html, body {
   position: absolute;
   top: calc(73 * var(--u));
   right: calc(46 * var(--u));
-  z-index: 9;
+  z-index: 16;
+  pointer-events: auto;
+  touch-action: manipulation;
   min-width: calc(36 * var(--u));
   height: calc(19 * var(--u));
   padding: calc(2 * var(--u)) calc(6 * var(--u));
@@ -130,19 +132,28 @@ html, body {
 
 .hair-toggle-btn {
   position: absolute;
-  top: calc(95 * var(--u));
+  top: calc(96 * var(--u));
   right: calc(46 * var(--u));
-  z-index: 9;
-  height: calc(18 * var(--u));
-  padding: calc(2 * var(--u)) calc(5 * var(--u));
-  background: rgba(15, 23, 42, 0.94);
+  z-index: 16;
+  pointer-events: auto;
+  touch-action: manipulation;
+  min-height: calc(22 * var(--u));
+  padding: calc(3 * var(--u)) calc(6 * var(--u));
+  background: rgba(15, 23, 42, 0.96);
   border: calc(1.5 * var(--u)) solid #090612;
   outline: calc(1 * var(--u)) solid #93C5FD;
   color: #E0F2FE;
-  font-size: calc(7.2 * var(--u));
+  font-size: calc(7.4 * var(--u));
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+}
+
+.hair-toggle-btn:active,
+.hair-toggle-btn.is-pressed {
+  transform: translateY(calc(2 * var(--u)));
+  filter: brightness(1.18);
+  outline-color: #FFFFFF;
 }
 
 .hair-toggle-btn.is-short {
@@ -245,7 +256,9 @@ html, body {
   left: calc(10 * var(--u));
   right: calc(10 * var(--u));
   height: calc(17 * var(--u));
-  z-index: 10;
+  z-index: 16;
+  pointer-events: auto;
+  touch-action: manipulation;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: calc(3 * var(--u));
@@ -285,7 +298,7 @@ html, body {
   top: calc(256 * var(--u));
   left: calc(10 * var(--u));
   right: calc(10 * var(--u));
-  height: calc(22 * var(--u));
+  height: calc(24 * var(--u));
   padding: calc(2 * var(--u)) calc(3.5 * var(--u));
   background: rgba(15, 11, 30, 0.96);
   border: calc(1.5 * var(--u)) solid var(--oshi-accent);
@@ -294,7 +307,9 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: calc(2 * var(--u));
-  z-index: 10;
+  z-index: 16;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .grp-selected-chip {
@@ -313,7 +328,7 @@ html, body {
 .grp-tool-btn {
   flex: 1 1 auto;
   min-width: 0;
-  height: calc(18 * var(--u));
+  height: calc(20 * var(--u));
   padding: calc(2 * var(--u)) calc(1.5 * var(--u));
   font-size: calc(6 * var(--u));
   font-weight: 800;
@@ -322,12 +337,20 @@ html, body {
   outline: calc(0.8 * var(--u)) solid #6d58a8;
   color: #F8FAFC;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .grp-hair-btn {
   background: #1e3a8a;
   outline-color: #93C5FD;
   color: #FEF08A;
+}
+
+.grp-hair-btn:active,
+.grp-hair-btn.is-pressed {
+  transform: translateY(calc(2 * var(--u)));
+  filter: brightness(1.2);
+  outline-color: #FFFFFF;
 }
 
 .grp-soul-btn {
@@ -1878,8 +1901,54 @@ html, body {
   text-shadow: calc(1.5 * var(--u)) calc(1.5 * var(--u)) 0 #7F1D1D;
 }
 
+.ticket-enter-btn:disabled {
+  opacity: 0.72;
+  cursor: wait;
+  pointer-events: none;
+  filter: saturate(0.75);
+}
+
 .ticket-guide-text {
   font-size: calc(6.8 * var(--u));
   line-height: 1.4;
   color: #94A3B8;
+}
+
+/* ===== Standard / Easy Game Mode Switch ===== */
+.ticket-mode-switch,
+.settings-mode-group {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(6 * var(--u));
+}
+
+.mode-opt-btn {
+  width: 100%;
+  min-width: 0;
+  height: calc(25 * var(--u));
+  padding: calc(2 * var(--u)) calc(4 * var(--u));
+  background: #1b1534;
+  border-color: #4f447a;
+  color: #CBD5E1;
+  font-size: calc(7.6 * var(--u));
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.mode-opt-btn.is-active {
+  background: var(--oshi-color, #3B82F6);
+  border-color: #090612;
+  outline: calc(1.2 * var(--u)) solid #FFFFFF;
+  color: #FFFFFF;
+  text-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 #090612;
+}
+
+.mode-opt-btn[data-game-mode="easy"].is-active {
+  background: linear-gradient(180deg, #EAB308 0%, #B45309 100%);
+  outline-color: #FEF08A;
+  color: #FFFBEB;
+  text-shadow: calc(1 * var(--u)) calc(1 * var(--u)) 0 #78350F;
 }

@@ -4,6 +4,15 @@
   const ChekiGame = global.ChekiGame || (global.ChekiGame = {});
   const CONFIG = ChekiGame.CONFIG || {};
 
+  const FALLBACK_SLOTS = ['main', 'pose', 'pose2', 'pose3', 'pose4'];
+  const SLOT_CONFIG_PROPS = [
+    ['main', 'spriteUrl'],
+    ['pose', 'poseSpriteUrl'],
+    ['pose2', 'pose2SpriteUrl'],
+    ['pose3', 'pose3SpriteUrl'],
+    ['pose4', 'pose4SpriteUrl']
+  ];
+
   class AssetsManager {
     constructor() {
       this._cleanMain = {};
@@ -19,12 +28,31 @@
       this._variantClean = {};
       this._variantProcessed = {};
       this._slotStatus = {};
+      this._queue = [];
+      this._activeCount = 0;
+      this._maxConcurrent = 4;
+      this._maxRetries = 2;
+      this._seqCounter = 0;
+      this._criticalWaiters = [];
       this._listeners = [];
       this._preloaded = false;
     }
 
     _statusKey(memberId, hairKey, slot) {
       return `${memberId}|${hairKey || 'default'}|${slot}`;
+    }
+
+    _resolveHairKey(memberId, hairStyle) {
+      if (!hairStyle || hairStyle === 'long') return null;
+      const members = Array.isArray(CONFIG.MEMBERS) ? CONFIG.MEMBERS : [];
+      const member = members.find((m) => m && m.id === memberId);
+      if (member && member.hairVariants && member.hairVariants[hairStyle]) {
+        return hairStyle;
+      }
+      if (this._variantProcessed[memberId] && this._variantProcessed[memberId][hairStyle]) {
+        return hairStyle;
+      }
+      return null;
     }
 
     _normalizeUrl(url, retryIndex) {
@@ -38,7 +66,7 @@
       if (!clean.startsWith('./') && !clean.startsWith('../')) {
         clean = `./${clean}`;
       }
-      const ver = CONFIG.ASSET_VERSION || '20261123';
+      const ver = CONFIG.ASSET_VERSION || '20261123c';
       if (!/[?&]v=/.test(clean)) {
         clean += `${clean.includes('?') ? '&' : '?'}v=${encodeURIComponent(ver)}`;
       }
@@ -92,6 +120,15 @@
       }
     }
 
+    _setVariantSlot(memberId, hairKey, slot, keyed, processed) {
+      if (!this._variantClean[memberId]) this._variantClean[memberId] = {};
+      if (!this._variantProcessed[memberId]) this._variantProcessed[memberId] = {};
+      if (!this._variantClean[memberId][hairKey]) this._variantClean[memberId][hairKey] = {};
+      if (!this._variantProcessed[memberId][hairKey]) this._variantProcessed[memberId][hairKey] = {};
+      this._variantClean[memberId][hairKey][slot] = keyed;
+      this._variantProcessed[memberId][hairKey][slot] = processed;
+    }
+
     _commitSlot(memberId, hairKey, slot, keyed, processed) {
       if (hairKey) {
         this._setVariantSlot(memberId, hairKey, slot, keyed, processed);
@@ -100,19 +137,132 @@
       }
     }
 
-    _loadSlot(memberId, hairKey, url, slot, retryCount) {
+    _getCriticalKeys() {
+      const members = Array.isArray(CONFIG.MEMBERS) ? CONFIG.MEMBERS : [];
+      const first = members.find((m) => m && m.id === 'member_1') || members[0];
+      if (!first || !first.id) return [];
+
+      const keys = [];
+      if (first.spriteUrl) {
+        keys.push(this._statusKey(first.id, null, 'main'));
+      }
+      if (first.hairVariants && typeof first.hairVariants === 'object') {
+        Object.keys(first.hairVariants).forEach((hairKey) => {
+          if (hairKey === 'long') return;
+          const hv = first.hairVariants[hairKey];
+          if (hv && hv.spriteUrl) {
+            keys.push(this._statusKey(first.id, hairKey, 'main'));
+          }
+        });
+      }
+      return keys;
+    }
+
+    isCriticalReady() {
+      const keys = this._getCriticalKeys();
+      if (keys.length === 0) return true;
+      return keys.every((k) => {
+        const st = this._slotStatus[k];
+        return st === 'loaded' || st === 'failed';
+      });
+    }
+
+    _checkCriticalWaiters() {
+      if (this._criticalWaiters.length === 0) return;
+      if (!this.isCriticalReady()) return;
+      const waiters = this._criticalWaiters.splice(0, this._criticalWaiters.length);
+      waiters.forEach((finish) => {
+        try {
+          finish(true);
+        } catch (_err) {
+          // Isolate resolver callbacks
+        }
+      });
+    }
+
+    preloadCritical(timeoutMs) {
+      this.preloadAll();
+      if (this.isCriticalReady()) {
+        return Promise.resolve(true);
+      }
+      const limit = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : 3500;
+      return new Promise((resolve) => {
+        let done = false;
+        let timerId = null;
+        const finish = (ready) => {
+          if (done) return;
+          done = true;
+          if (timerId !== null && typeof global.clearTimeout === 'function') {
+            global.clearTimeout(timerId);
+          }
+          resolve(Boolean(ready));
+        };
+        this._criticalWaiters.push(finish);
+        if (typeof global.setTimeout === 'function') {
+          timerId = global.setTimeout(() => {
+            const idx = this._criticalWaiters.indexOf(finish);
+            if (idx >= 0) this._criticalWaiters.splice(idx, 1);
+            finish(this.isCriticalReady());
+          }, limit);
+        }
+      });
+    }
+
+    _sortQueue() {
+      this._queue.sort((a, b) => (a.priority - b.priority) || (a.seq - b.seq));
+    }
+
+    _enqueueSlot(memberId, hairKey, url, slot, priority) {
       const statusKey = this._statusKey(memberId, hairKey, slot);
-      const attempt = retryCount || 0;
       const curStatus = this._slotStatus[statusKey];
 
-      if (curStatus === 'loaded') return;
-      if (attempt === 0 && (curStatus === 'loading' || curStatus === 'failed')) {
+      if (curStatus === 'loaded' || curStatus === 'failed' || curStatus === 'loading' || curStatus === 'queued') {
         return;
       }
 
       if (!url || typeof global.Image !== 'function') {
         this._slotStatus[statusKey] = 'failed';
         this._commitSlot(memberId, hairKey, slot, null, null);
+        this._checkCriticalWaiters();
+        return;
+      }
+
+      this._slotStatus[statusKey] = 'queued';
+      this._queue.push({
+        statusKey,
+        memberId,
+        hairKey,
+        url,
+        slot,
+        priority: priority != null ? priority : 4,
+        seq: this._seqCounter++,
+        attempt: 0
+      });
+      this._sortQueue();
+    }
+
+    _pumpQueue() {
+      while (this._activeCount < this._maxConcurrent && this._queue.length > 0) {
+        const task = this._queue.shift();
+        if (!task) break;
+        const curStatus = this._slotStatus[task.statusKey];
+        if (curStatus === 'loaded' || curStatus === 'failed') {
+          continue;
+        }
+        this._activeCount += 1;
+        this._runTask(task);
+      }
+    }
+
+    _runTask(task) {
+      const { statusKey, memberId, hairKey, url, slot, attempt } = task;
+
+      if (typeof global.Image !== 'function') {
+        this._activeCount = Math.max(0, this._activeCount - 1);
+        this._slotStatus[statusKey] = 'failed';
+        this._commitSlot(memberId, hairKey, slot, null, null);
+        this._checkCriticalWaiters();
+        this._pumpQueue();
         return;
       }
 
@@ -125,15 +275,46 @@
         settled = true;
         img.onload = null;
         img.onerror = null;
-        if (this._slotStatus[statusKey] === 'loaded') return;
+        this._activeCount = Math.max(0, this._activeCount - 1);
 
-        if (attempt < 1) {
-          this._loadSlot(memberId, hairKey, url, slot, attempt + 1);
+        if (this._slotStatus[statusKey] === 'loaded') {
+          this._checkCriticalWaiters();
+          this._pumpQueue();
           return;
         }
+
+        if (attempt < this._maxRetries) {
+          const nextAttempt = attempt + 1;
+          const requeue = () => {
+            if (this._slotStatus[statusKey] === 'loaded') return;
+            this._slotStatus[statusKey] = 'queued';
+            this._queue.push({
+              statusKey,
+              memberId,
+              hairKey,
+              url,
+              slot,
+              priority: Math.min(task.priority, 1),
+              seq: this._seqCounter++,
+              attempt: nextAttempt
+            });
+            this._sortQueue();
+            this._pumpQueue();
+          };
+          if (typeof global.setTimeout === 'function') {
+            global.setTimeout(requeue, 250 * nextAttempt);
+          } else {
+            requeue();
+          }
+          this._pumpQueue();
+          return;
+        }
+
         this._slotStatus[statusKey] = 'failed';
         this._commitSlot(memberId, hairKey, slot, null, null);
         this._notify(memberId);
+        this._checkCriticalWaiters();
+        this._pumpQueue();
       };
 
       img.onload = () => {
@@ -145,38 +326,82 @@
         settled = true;
         img.onload = null;
         img.onerror = null;
-        if (this._slotStatus[statusKey] === 'loaded') return;
+        this._activeCount = Math.max(0, this._activeCount - 1);
 
-        const filter = ChekiGame.PixelFilter;
-        const keyed = (filter && typeof filter.removeGreenScreen === 'function')
-          ? filter.removeGreenScreen(img)
-          : img;
-        const processed = this._applyFilter(keyed);
+        if (this._slotStatus[statusKey] !== 'loaded') {
+          const filter = ChekiGame.PixelFilter;
+          const keyed = (filter && typeof filter.removeGreenScreen === 'function')
+            ? filter.removeGreenScreen(img)
+            : img;
+          const processed = this._applyFilter(keyed);
 
-        this._slotStatus[statusKey] = 'loaded';
-        this._commitSlot(memberId, hairKey, slot, keyed, processed);
-        this._notify(memberId);
+          this._slotStatus[statusKey] = 'loaded';
+          this._commitSlot(memberId, hairKey, slot, keyed, processed);
+          this._notify(memberId);
+          this._checkCriticalWaiters();
+        }
+        this._pumpQueue();
       };
 
       img.onerror = failSlot;
       img.src = this._normalizeUrl(url, attempt);
     }
 
-    _loadImageSlot(memberId, url, slot) {
-      this._loadSlot(memberId, null, url, slot, 0);
+    _loadImageSlot(memberId, url, slot, priority) {
+      this._enqueueSlot(memberId, null, url, slot, priority);
+      this._pumpQueue();
     }
 
-    _setVariantSlot(memberId, hairKey, slot, keyed, processed) {
-      if (!this._variantClean[memberId]) this._variantClean[memberId] = {};
-      if (!this._variantProcessed[memberId]) this._variantProcessed[memberId] = {};
-      if (!this._variantClean[memberId][hairKey]) this._variantClean[memberId][hairKey] = {};
-      if (!this._variantProcessed[memberId][hairKey]) this._variantProcessed[memberId][hairKey] = {};
-      this._variantClean[memberId][hairKey][slot] = keyed;
-      this._variantProcessed[memberId][hairKey][slot] = processed;
+    _loadVariantImageSlot(memberId, hairKey, url, slot, priority) {
+      this._enqueueSlot(memberId, hairKey, url, slot, priority);
+      this._pumpQueue();
     }
 
-    _loadVariantImageSlot(memberId, hairKey, url, slot) {
-      this._loadSlot(memberId, hairKey, url, slot, 0);
+    prioritizeSlot(memberId, variant, hairStyle, targetPriority) {
+      if (!memberId) return;
+      const slot = this._normalizeVariant(variant);
+      const hairKey = this._resolveHairKey(memberId, hairStyle);
+      const key = this._statusKey(memberId, hairKey, slot);
+      const pVal = typeof targetPriority === 'number' ? targetPriority : 1;
+
+      let changed = false;
+      this._queue.forEach((task) => {
+        if (task.statusKey === key && task.priority > pVal) {
+          task.priority = pVal;
+          changed = true;
+        }
+      });
+      if (changed) {
+        this._sortQueue();
+      }
+      this._pumpQueue();
+    }
+
+    prioritizeMember(memberId, hairStyle) {
+      if (!memberId) return;
+      const hairKey = this._resolveHairKey(memberId, hairStyle);
+      FALLBACK_SLOTS.forEach((slot) => {
+        const p = slot === 'main' ? 1 : 1.5;
+        if (hairKey) {
+          this.prioritizeSlot(memberId, slot, hairKey, p);
+        }
+        this.prioritizeSlot(memberId, slot, null, hairKey ? p + 0.2 : p);
+      });
+    }
+
+    isSlotLoaded(memberId, variant, hairStyle) {
+      if (!memberId) return false;
+      const slot = this._normalizeVariant(variant);
+      const hairKey = this._resolveHairKey(memberId, hairStyle);
+      return this._slotStatus[this._statusKey(memberId, hairKey, slot)] === 'loaded';
+    }
+
+    isSlotPending(memberId, variant, hairStyle) {
+      if (!memberId) return false;
+      const slot = this._normalizeVariant(variant);
+      const hairKey = this._resolveHairKey(memberId, hairStyle);
+      const st = this._slotStatus[this._statusKey(memberId, hairKey, slot)];
+      return st === 'queued' || st === 'loading';
     }
 
     preloadAll() {
@@ -184,47 +409,65 @@
       this._preloaded = true;
 
       const members = Array.isArray(CONFIG.MEMBERS) ? CONFIG.MEMBERS : [];
-      // 1. 优先请求全部成员主立绘，避免移动端并发队列阻塞首屏显影
-      members.forEach((member) => {
-        if (!member || !member.id) return;
-        this._loadImageSlot(member.id, member.spriteUrl, 'main');
+      const firstMember = members.find((m) => m && m.id === 'member_1') || members[0];
+      const otherMembers = members.filter((m) => m && m.id && (!firstMember || m.id !== firstMember.id));
+
+      // P0: 首批关键立绘 —— 「蓝」默认立绘 + 短发主立绘
+      if (firstMember && firstMember.id) {
+        this._enqueueSlot(firstMember.id, null, firstMember.spriteUrl, 'main', 0);
+        if (firstMember.hairVariants && typeof firstMember.hairVariants === 'object') {
+          Object.keys(firstMember.hairVariants).forEach((hairKey) => {
+            if (hairKey === 'long') return;
+            const hv = firstMember.hairVariants[hairKey];
+            if (hv) {
+              this._enqueueSlot(firstMember.id, hairKey, hv.spriteUrl, 'main', 0);
+            }
+          });
+        }
+      }
+
+      // P2: 其余 4 位成员主立绘
+      otherMembers.forEach((member) => {
+        this._enqueueSlot(member.id, null, member.spriteUrl, 'main', 2);
       });
 
-      // 2. 随后按动作槽位依次预加载 pose ~ pose4
-      const poseSlotKeys = [
-        ['pose', 'poseSpriteUrl'],
-        ['pose2', 'pose2SpriteUrl'],
-        ['pose3', 'pose3SpriteUrl'],
-        ['pose4', 'pose4SpriteUrl']
-      ];
-      poseSlotKeys.forEach(([slot, prop]) => {
-        members.forEach((member) => {
-          if (!member || !member.id) return;
-          this._loadImageSlot(member.id, member[prop], slot);
+      // P3: 「蓝」默认与短发的其余动作立绘 (pose ~ pose4)
+      if (firstMember && firstMember.id) {
+        SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
+          this._enqueueSlot(firstMember.id, null, firstMember[prop], slot, 3);
+        });
+        if (firstMember.hairVariants && typeof firstMember.hairVariants === 'object') {
+          Object.keys(firstMember.hairVariants).forEach((hairKey) => {
+            if (hairKey === 'long') return;
+            const hv = firstMember.hairVariants[hairKey];
+            if (!hv) return;
+            SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
+              this._enqueueSlot(firstMember.id, hairKey, hv[prop], slot, 3);
+            });
+          });
+        }
+      }
+
+      // P4: 其余 4 位成员动作立绘及额外发型变体
+      SLOT_CONFIG_PROPS.slice(1).forEach(([slot, prop]) => {
+        otherMembers.forEach((member) => {
+          this._enqueueSlot(member.id, null, member[prop], slot, 4);
         });
       });
 
-      // 3. 最后预加载额外发型变体
-      const variantSlotKeys = [
-        ['main', 'spriteUrl'],
-        ['pose', 'poseSpriteUrl'],
-        ['pose2', 'pose2SpriteUrl'],
-        ['pose3', 'pose3SpriteUrl'],
-        ['pose4', 'pose4SpriteUrl']
-      ];
-      members.forEach((member) => {
-        if (!member || !member.id || !member.hairVariants || typeof member.hairVariants !== 'object') {
-          return;
-        }
+      otherMembers.forEach((member) => {
+        if (!member.hairVariants || typeof member.hairVariants !== 'object') return;
         Object.keys(member.hairVariants).forEach((hairKey) => {
           if (hairKey === 'long') return;
           const hv = member.hairVariants[hairKey];
           if (!hv) return;
-          variantSlotKeys.forEach(([slot, prop]) => {
-            this._loadVariantImageSlot(member.id, hairKey, hv[prop], slot);
+          SLOT_CONFIG_PROPS.forEach(([slot, prop], idx) => {
+            this._enqueueSlot(member.id, hairKey, hv[prop], slot, idx === 0 ? 2 : 4);
           });
         });
       });
+
+      this._pumpQueue();
     }
 
     reprocessAll() {
@@ -252,7 +495,7 @@
           Object.keys(cleanVars).forEach((hairKey) => {
             const slots = cleanVars[hairKey];
             if (!slots) return;
-            ['main', 'pose', 'pose2', 'pose3', 'pose4'].forEach((s) => {
+            FALLBACK_SLOTS.forEach((s) => {
               this._setVariantSlot(
                 member.id,
                 hairKey,
@@ -285,14 +528,13 @@
 
     getSprite(memberId, variant, hairStyle) {
       const slot = this._normalizeVariant(variant);
-      const fallbackSlots = ['main', 'pose', 'pose2', 'pose3', 'pose4'];
 
       if (hairStyle && hairStyle !== 'long' && this._variantProcessed[memberId]) {
         const hv = this._variantProcessed[memberId][hairStyle];
         if (hv) {
           if (hv[slot]) return hv[slot];
-          for (let i = 0; i < fallbackSlots.length; i += 1) {
-            const fbSlot = fallbackSlots[i];
+          for (let i = 0; i < FALLBACK_SLOTS.length; i += 1) {
+            const fbSlot = FALLBACK_SLOTS[i];
             if (hv[fbSlot]) return hv[fbSlot];
           }
         }
@@ -301,8 +543,8 @@
       const direct = this._getDefaultProcessedSlot(memberId, slot);
       if (direct) return direct;
 
-      for (let i = 0; i < fallbackSlots.length; i += 1) {
-        const fb = this._getDefaultProcessedSlot(memberId, fallbackSlots[i]);
+      for (let i = 0; i < FALLBACK_SLOTS.length; i += 1) {
+        const fb = this._getDefaultProcessedSlot(memberId, FALLBACK_SLOTS[i]);
         if (fb) return fb;
       }
 

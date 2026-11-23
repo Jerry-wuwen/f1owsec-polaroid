@@ -1510,7 +1510,7 @@
     const vf = isGroup ? CONFIG.GROUP_VIEWFINDER : CONFIG.VIEWFINDER;
     const W = CONFIG.CANVAS_WIDTH;
     const dist = Math.abs(cursorPos - 0.5);
-    const inPerfect = dist <= CONFIG.RHYTHM_BAR.perfectHalf;
+    const inPerfect = Boolean(poseInfo && poseInfo.isEasyMode) || dist <= CONFIG.RHYTHM_BAR.perfectHalf;
     const activePose = poseInfo && poseInfo.pose ? poseInfo.pose : null;
     const alertPulse = poseInfo && poseInfo.alertFlashTimer > 0 && (Math.sin(time * 24) > 0);
     const isRarePose = activePose && (activePose.rarity === 'SR' || activePose.rarity === 'SSR');
@@ -1623,7 +1623,7 @@
     }
   }
 
-  function drawRhythmBar(ctx, cursorPos, time) {
+  function drawRhythmBar(ctx, cursorPos, time, isEasyMode) {
     const rb = CONFIG.RHYTHM_BAR;
     const x = rb.x;
     const y = rb.y;
@@ -1631,35 +1631,68 @@
     const h = rb.h;
 
     // Header label & zone legend above bar
-    drawBitmapText(ctx, 'FOCUS', x, y - 10, 1, '#CBD5E1');
-    px(ctx, x + w - 92, y - 9, 5, 5, '#FACC15');
-    drawBitmapText(ctx, 'PERFECT', x + w - 84, y - 10, 1, '#FEF08A');
-    px(ctx, x + w - 38, y - 9, 5, 5, '#22C55E');
-    drawBitmapText(ctx, 'GREAT', x + w - 30, y - 10, 1, '#86EFAC');
+    if (isEasyMode) {
+      drawBitmapText(ctx, 'FOCUS', x, y - 10, 1, '#FEF08A');
+      ctx.save();
+      ctx.scale(1 / STAGE_SCALE, 1 / STAGE_SCALE);
+      ctx.font = 'bold 18px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#090612';
+      const tipText = '简单模式 · 必出 PERFECT';
+      const tipX = Math.round((x + w) * STAGE_SCALE);
+      const tipY = Math.round((y - 3) * STAGE_SCALE);
+      if (typeof ctx.strokeText === 'function') {
+        ctx.strokeText(tipText, tipX, tipY);
+      }
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillText(tipText, tipX, tipY);
+      ctx.restore();
+    } else {
+      drawBitmapText(ctx, 'FOCUS', x, y - 10, 1, '#CBD5E1');
+      px(ctx, x + w - 92, y - 9, 5, 5, '#FACC15');
+      drawBitmapText(ctx, 'PERFECT', x + w - 84, y - 10, 1, '#FEF08A');
+      px(ctx, x + w - 38, y - 9, 5, 5, '#22C55E');
+      drawBitmapText(ctx, 'GREAT', x + w - 30, y - 10, 1, '#86EFAC');
+    }
 
     // Outer pixel casing
     px(ctx, x - 3, y - 3, w + 6, h + 6, '#090612');
     px(ctx, x - 2, y - 2, w + 4, h + 4, '#4c407a');
     px(ctx, x, y, w, h, '#20193a');
 
-    // Subtle GOOD zone ticks
-    for (let tx = x + 10; tx < x + w - 6; tx += 12) {
-      px(ctx, tx, y + h - 4, 1, 3, '#3b3166');
+    if (isEasyMode) {
+      // Full-bar gold PERFECT region in Easy Mode
+      px(ctx, x, y, w, h, '#EAB308');
+      px(ctx, x, y, w, 5, '#FEF08A');
+      px(ctx, x, y + h - 3, w, 3, '#CA8A04');
+      for (let tx = x + 16; tx < x + w - 8; tx += 28) {
+        if (Math.sin(time * 6 + tx * 0.15) > 0) {
+          px(ctx, tx, y + 7, 2, 2, '#FFFFFF');
+        }
+      }
+    } else {
+      // Subtle GOOD zone ticks
+      for (let tx = x + 10; tx < x + w - 6; tx += 12) {
+        px(ctx, tx, y + h - 4, 1, 3, '#3b3166');
+      }
+
+      // GREAT green region
+      const greatStart = Math.round(x + (0.5 - rb.greatHalf) * w);
+      const greatW = Math.round(rb.greatHalf * 2 * w);
+      px(ctx, greatStart, y, greatW, h, '#16A34A');
+      px(ctx, greatStart, y, greatW, 4, '#4ADE80');
+      px(ctx, greatStart, y + h - 3, greatW, 3, '#15803D');
+
+      // PERFECT gold center region
+      const perfStart = Math.round(x + (0.5 - rb.perfectHalf) * w);
+      const perfW = Math.round(rb.perfectHalf * 2 * w);
+      px(ctx, perfStart, y, perfW, h, '#EAB308');
+      px(ctx, perfStart, y, perfW, 5, '#FEF08A');
+      px(ctx, perfStart, y + h - 3, perfW, 3, '#CA8A04');
     }
-
-    // GREAT green region
-    const greatStart = Math.round(x + (0.5 - rb.greatHalf) * w);
-    const greatW = Math.round(rb.greatHalf * 2 * w);
-    px(ctx, greatStart, y, greatW, h, '#16A34A');
-    px(ctx, greatStart, y, greatW, 4, '#4ADE80');
-    px(ctx, greatStart, y + h - 3, greatW, 3, '#15803D');
-
-    // PERFECT gold center region
-    const perfStart = Math.round(x + (0.5 - rb.perfectHalf) * w);
-    const perfW = Math.round(rb.perfectHalf * 2 * w);
-    px(ctx, perfStart, y, perfW, h, '#EAB308');
-    px(ctx, perfStart, y, perfW, 5, '#FEF08A');
-    px(ctx, perfStart, y + h - 3, perfW, 3, '#CA8A04');
 
     // Center target hairline
     const centerX = Math.round(x + w * 0.5);
@@ -2053,8 +2086,12 @@
     const el = {
       startScreen: document.getElementById('start-screen'),
       nicknameInput: document.getElementById('nickname-input'),
+      btnTicketModeStandard: document.getElementById('btn-ticket-mode-standard'),
+      btnTicketModeEasy: document.getElementById('btn-ticket-mode-easy'),
       btnEnterTicket: document.getElementById('btn-enter-ticket'),
       btnOpenTicket: document.getElementById('btn-open-ticket'),
+      btnSettingsModeStandard: document.getElementById('btn-settings-mode-standard'),
+      btnSettingsModeEasy: document.getElementById('btn-settings-mode-easy'),
       colorDot: document.getElementById('member-color-dot'),
       memberName: document.getElementById('member-name-label'),
       memberTag: document.getElementById('member-color-tag'),
@@ -2191,6 +2228,7 @@
 
     const savedNick = String(loadSavedPref(CONFIG.NICKNAME_STORAGE_KEY || 'f1owsec_nickname_v1', '')).slice(0, 10);
     const savedHair = loadSavedPref(CONFIG.HAIR_PREF_STORAGE_KEY || 'f1owsec_hair_pref_v1', 'long') === 'short' ? 'short' : 'long';
+    const savedGameMode = loadSavedPref(CONFIG.GAME_MODE_STORAGE_KEY || 'f1owsec_game_mode_v1', 'standard') === 'easy' ? 'easy' : 'standard';
 
     const state = {
       memberIndex: 0,
@@ -2199,6 +2237,9 @@
       mode: el.startScreen ? 'START' : 'AIMING', // 'START' | 'AIMING' | 'CAPTURING' | 'DEVELOPING' | 'DIY' | 'ALBUM'
       nickname: savedNick,
       lanHairStyle: savedHair,
+      gameMode: savedGameMode,
+      enteringTicket: false,
+      lastRenderedSpriteByMember: {},
       timerSeconds: 60,
       timerExpired: false,
       lastTenBubbleCooldown: 0,
@@ -2278,9 +2319,16 @@
     };
 
     function getActiveSprite(memberId, variant, hairStyle) {
-      if (!AssetsManager) return null;
+      if (!AssetsManager) {
+        return state.lastRenderedSpriteByMember[memberId] || null;
+      }
       const effectiveHair = memberId === 'member_1' ? (hairStyle || state.lanHairStyle) : null;
-      return AssetsManager.getSprite(memberId, variant, effectiveHair);
+      const sprite = AssetsManager.getSprite(memberId, variant, effectiveHair);
+      if (sprite) {
+        state.lastRenderedSpriteByMember[memberId] = sprite;
+        return sprite;
+      }
+      return state.lastRenderedSpriteByMember[memberId] || null;
     }
 
     function getActiveSpriteMap(variant) {
@@ -2553,10 +2601,26 @@
       if (grpLan) {
         grpLan.hairStyle = state.lanHairStyle;
       }
+      const curSlot = (poseController && poseController.activeSpriteSlot) || 'main';
+      if (AssetsManager && typeof AssetsManager.prioritizeMember === 'function') {
+        AssetsManager.prioritizeMember('member_1', state.lanHairStyle);
+        if (typeof AssetsManager.prioritizeSlot === 'function') {
+          AssetsManager.prioritizeSlot('member_1', curSlot, state.lanHairStyle, 0);
+        }
+      }
       updateHairToggleUI();
       refreshAllAvatars('member_1');
       AudioManager.playUiClick();
-      showGlobalToast(`★ 蓝已切换为${state.lanHairStyle === 'short' ? '短发' : '长发'}造型！`);
+      const isShort = state.lanHairStyle === 'short';
+      const isPending = AssetsManager &&
+        typeof AssetsManager.isSlotPending === 'function' &&
+        AssetsManager.isSlotPending('member_1', curSlot, state.lanHairStyle) &&
+        !AssetsManager.isSlotLoaded('member_1', curSlot, state.lanHairStyle);
+      showGlobalToast(
+        isPending
+          ? `★ ${isShort ? '短发' : '长发'}立绘加载中…`
+          : `★ 蓝已切换为${isShort ? '短发' : '长发'}造型！`
+      );
     }
 
     function buildGroupMemberTabs() {
@@ -2876,17 +2940,50 @@
     }
 
     function enterFromTicket() {
+      if (state.enteringTicket) return;
+
       if (el.nicknameInput) {
         const cleanNick = String(el.nicknameInput.value || '').trim().slice(0, 10);
         state.nickname = cleanNick;
         el.nicknameInput.value = cleanNick;
         savePref(CONFIG.NICKNAME_STORAGE_KEY || 'f1owsec_nickname_v1', cleanNick);
       }
-      if (el.startScreen) {
-        el.startScreen.classList.add('hidden');
+
+      const completeEntry = (skipSound) => {
+        state.enteringTicket = false;
+        if (el.btnEnterTicket) {
+          el.btnEnterTicket.disabled = false;
+          el.btnEnterTicket.textContent = '检票入场';
+        }
+        if (el.startScreen) {
+          el.startScreen.classList.add('hidden');
+        }
+        state.mode = 'AIMING';
+        if (!skipSound) {
+          AudioManager.playUiClick();
+        }
+      };
+
+      if (
+        AssetsManager &&
+        typeof AssetsManager.isCriticalReady === 'function' &&
+        !AssetsManager.isCriticalReady() &&
+        typeof AssetsManager.preloadCritical === 'function'
+      ) {
+        state.enteringTicket = true;
+        AudioManager.playUiClick();
+        if (el.btnEnterTicket) {
+          el.btnEnterTicket.disabled = true;
+          el.btnEnterTicket.textContent = '立绘加载中…';
+        }
+        AssetsManager.preloadCritical(3500).then(
+          () => completeEntry(true),
+          () => completeEntry(true)
+        );
+        return;
       }
-      state.mode = 'AIMING';
-      AudioManager.playUiClick();
+
+      completeEntry(false);
     }
 
     function selectMember(index) {
@@ -2899,8 +2996,20 @@
       hideGroupGuide();
       hideGroupNameHint();
       state.memberIndex = index;
+      const nextMember = getCurrentMember();
+      if (AssetsManager && nextMember && typeof AssetsManager.prioritizeMember === 'function') {
+        const nextHair = nextMember.id === 'member_1' ? state.lanHairStyle : null;
+        AssetsManager.prioritizeMember(nextMember.id, nextHair);
+        if (
+          typeof AssetsManager.isSlotPending === 'function' &&
+          AssetsManager.isSlotPending(nextMember.id, 'main', nextHair) &&
+          !AssetsManager.isSlotLoaded(nextMember.id, 'main', nextHair)
+        ) {
+          showGlobalToast(`★ ${nextMember.name}立绘加载中…`);
+        }
+      }
       if (poseController) {
-        poseController.resetForMember(getCurrentMember());
+        poseController.resetForMember(nextMember);
       }
       applyMemberTheme();
       AudioManager.playSwitch();
@@ -2955,8 +3064,21 @@
       const item = getSelectedGroupItem();
       if (!item || !state.isGroupMode || state.mode !== 'AIMING') return;
       const idx = SPRITE_SLOTS.indexOf(item.spriteSlot || 'main');
-      item.spriteSlot = SPRITE_SLOTS[(idx + 1) % SPRITE_SLOTS.length];
+      const nextSlot = SPRITE_SLOTS[(idx + 1) % SPRITE_SLOTS.length];
+      item.spriteSlot = nextSlot;
+      const hairStyle = item.memberId === 'member_1' ? (item.hairStyle || state.lanHairStyle) : null;
+      if (AssetsManager && typeof AssetsManager.prioritizeSlot === 'function') {
+        AssetsManager.prioritizeSlot(item.memberId, nextSlot, hairStyle, 1);
+      }
       AudioManager.playUiClick();
+      if (
+        AssetsManager &&
+        typeof AssetsManager.isSlotPending === 'function' &&
+        AssetsManager.isSlotPending(item.memberId, nextSlot, hairStyle) &&
+        !AssetsManager.isSlotLoaded(item.memberId, nextSlot, hairStyle)
+      ) {
+        showGlobalToast('★ 动作立绘加载中…');
+      }
     }
 
     function cycleSelectedGroupHair() {
@@ -2965,9 +3087,25 @@
       item.hairStyle = item.hairStyle === 'short' ? 'long' : 'short';
       state.lanHairStyle = item.hairStyle;
       savePref(CONFIG.HAIR_PREF_STORAGE_KEY || 'f1owsec_hair_pref_v1', state.lanHairStyle);
+      const curSlot = item.spriteSlot || 'main';
+      if (AssetsManager && typeof AssetsManager.prioritizeMember === 'function') {
+        AssetsManager.prioritizeMember('member_1', item.hairStyle);
+        if (typeof AssetsManager.prioritizeSlot === 'function') {
+          AssetsManager.prioritizeSlot('member_1', curSlot, item.hairStyle, 0);
+        }
+      }
       refreshAllAvatars('member_1');
       AudioManager.playUiClick();
-      showGlobalToast(`★ 蓝已切换为${item.hairStyle === 'short' ? '短发' : '长发'}造型！`);
+      const isShort = item.hairStyle === 'short';
+      const isPending = AssetsManager &&
+        typeof AssetsManager.isSlotPending === 'function' &&
+        AssetsManager.isSlotPending('member_1', curSlot, item.hairStyle) &&
+        !AssetsManager.isSlotLoaded('member_1', curSlot, item.hairStyle);
+      showGlobalToast(
+        isPending
+          ? `★ ${isShort ? '短发' : '长发'}立绘加载中…`
+          : `★ 蓝已切换为${isShort ? '短发' : '长发'}造型！`
+      );
     }
 
     function flipSelectedGroupItem() {
@@ -3113,10 +3251,26 @@
 
     function handleManualPoseSwitch() {
       if (state.mode !== 'AIMING' || state.isGroupMode || !poseController) return;
-      if (poseController.triggerManualSwitch(getCurrentMember(), getLastTenContext())) {
+      const curMember = getCurrentMember();
+      const switchOpts = Object.assign({}, getLastTenContext(), {
+        sequential: state.gameMode === 'easy'
+      });
+      if (poseController.triggerManualSwitch(curMember, switchOpts)) {
         AudioManager.playUiClick();
         updatePoseButtonUI();
         updatePoseHudBadge();
+        const targetSlot = poseController.activeSpriteSlot || 'main';
+        const hairStyle = curMember && curMember.id === 'member_1' ? state.lanHairStyle : null;
+        if (AssetsManager && curMember && typeof AssetsManager.prioritizeSlot === 'function') {
+          AssetsManager.prioritizeSlot(curMember.id, targetSlot, hairStyle, 1);
+          if (
+            typeof AssetsManager.isSlotPending === 'function' &&
+            AssetsManager.isSlotPending(curMember.id, targetSlot, hairStyle) &&
+            !AssetsManager.isSlotLoaded(curMember.id, targetSlot, hairStyle)
+          ) {
+            showGlobalToast('★ 动作立绘加载中…');
+          }
+        }
       }
     }
 
@@ -3142,6 +3296,9 @@
     }
 
     function evaluateJudgment(cursorPos) {
+      if (state.gameMode === 'easy') {
+        return CONFIG.JUDGMENTS.PERFECT;
+      }
       const dist = Math.abs(cursorPos - 0.5);
       if (dist <= CONFIG.RHYTHM_BAR.perfectHalf) {
         return CONFIG.JUDGMENTS.PERFECT;
@@ -4179,7 +4336,13 @@
       const lastTenCtx = getLastTenContext();
       if (poseController) {
         const poseActive = state.mode === 'AIMING' && !state.timerExpired;
-        poseController.update(dt, getCurrentMember(), state.isGroupMode, poseActive, lastTenCtx);
+        poseController.update(
+          dt,
+          getCurrentMember(),
+          state.isGroupMode,
+          poseActive,
+          Object.assign({}, lastTenCtx, { easyMode: state.gameMode === 'easy' })
+        );
         updatePoseButtonUI();
         updateCallButtonUI();
         updatePoseHudBadge();
@@ -4249,11 +4412,12 @@
               alertFlashTimer: poseController.alertFlashTimer,
               focusFlashRatio: poseSnap ? poseSnap.focusFlashRatio : 0,
               faceLockActive: Boolean(poseSnap && poseSnap.faceLockActive),
-              timerSeconds: state.timerSeconds
+              timerSeconds: state.timerSeconds,
+              isEasyMode: state.gameMode === 'easy'
             }
-          : { timerSeconds: state.timerSeconds }
+          : { timerSeconds: state.timerSeconds, isEasyMode: state.gameMode === 'easy' }
       );
-      drawRhythmBar(stageCtx, state.cursorPos, state.time);
+      drawRhythmBar(stageCtx, state.cursorPos, state.time, state.gameMode === 'easy');
 
       updateAndDrawParticles(stageCtx, state.particles, dt);
 
@@ -4284,7 +4448,38 @@
       }
     }
 
+    function syncGameModeUI() {
+      const isEasy = state.gameMode === 'easy';
+      const pairs = [
+        [el.btnTicketModeStandard, !isEasy],
+        [el.btnTicketModeEasy, isEasy],
+        [el.btnSettingsModeStandard, !isEasy],
+        [el.btnSettingsModeEasy, isEasy]
+      ];
+      pairs.forEach(([btn, active]) => {
+        if (!btn) return;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    }
+
+    function setGameMode(nextMode, silent) {
+      const normalized = nextMode === 'easy' ? 'easy' : 'standard';
+      const changed = state.gameMode !== normalized;
+      state.gameMode = normalized;
+      savePref(CONFIG.GAME_MODE_STORAGE_KEY || 'f1owsec_game_mode_v1', normalized);
+      syncGameModeUI();
+      if (!silent && changed) {
+        showGlobalToast(
+          normalized === 'easy'
+            ? '★ 已切换为简单模式：顺序动作 · 必出 PERFECT'
+            : '★ 已切换为标准模式'
+        );
+      }
+    }
+
     function syncSettingsUI() {
+      syncGameModeUI();
       if (!PixelFilter || !el.settingsModal) return;
       const s = PixelFilter.getSettings();
 
@@ -4321,10 +4516,101 @@
       syncSettingsUI();
     }
 
+    function bindReliableTap(btn, handler) {
+      if (!btn || typeof handler !== 'function') return;
+      let lastTapTs = 0;
+      let pressTimerId = null;
+
+      const flashPressed = () => {
+        btn.classList.add('is-pressed');
+        if (pressTimerId) global.clearTimeout(pressTimerId);
+        pressTimerId = global.setTimeout(() => {
+          btn.classList.remove('is-pressed');
+          pressTimerId = null;
+        }, 140);
+      };
+
+      const invoke = (e) => {
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
+        flashPressed();
+        handler(e);
+      };
+
+      if (typeof global.PointerEvent === 'function') {
+        let activePointerId = null;
+        btn.addEventListener('pointerdown', (e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          e.stopPropagation();
+          activePointerId = e.pointerId;
+          btn.classList.add('is-pressed');
+        });
+        btn.addEventListener('pointerup', (e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          if (activePointerId !== null && e.pointerId !== activePointerId) return;
+          activePointerId = null;
+          e.stopPropagation();
+          if (typeof btn.getBoundingClientRect === 'function' && typeof e.clientX === 'number') {
+            const r = btn.getBoundingClientRect();
+            const pad = 10;
+            if (e.clientX < r.left - pad || e.clientX > r.right + pad || e.clientY < r.top - pad || e.clientY > r.bottom + pad) {
+              btn.classList.remove('is-pressed');
+              return;
+            }
+          }
+          lastTapTs = Date.now();
+          invoke(e);
+        });
+        btn.addEventListener('pointercancel', () => {
+          activePointerId = null;
+          btn.classList.remove('is-pressed');
+        });
+      }
+
+      btn.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        btn.classList.add('is-pressed');
+      }, { passive: true });
+
+      btn.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        if (typeof global.PointerEvent !== 'function') {
+          lastTapTs = Date.now();
+          if (e.cancelable) e.preventDefault();
+          invoke(e);
+        }
+      }, { passive: false });
+
+      btn.addEventListener('touchcancel', () => {
+        btn.classList.remove('is-pressed');
+      }, { passive: true });
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (Date.now() - lastTapTs < 450) {
+          return;
+        }
+        lastTapTs = Date.now();
+        invoke(e);
+      });
+    }
+
     function bindEvents() {
       if (el.btnEnterTicket) {
         el.btnEnterTicket.addEventListener('click', enterFromTicket);
       }
+      const bindModeOption = (btn, modeVal) => {
+        if (!btn) return;
+        bindReliableTap(btn, () => {
+          AudioManager.playUiClick();
+          setGameMode(modeVal);
+        });
+      };
+      bindModeOption(el.btnTicketModeStandard, 'standard');
+      bindModeOption(el.btnTicketModeEasy, 'easy');
+      bindModeOption(el.btnSettingsModeStandard, 'standard');
+      bindModeOption(el.btnSettingsModeEasy, 'easy');
       if (el.nicknameInput) {
         el.nicknameInput.addEventListener('input', () => {
           const clean = String(el.nicknameInput.value || '').slice(0, 10);
@@ -4345,10 +4631,10 @@
         el.btnRenewTicket.addEventListener('click', renewTicket);
       }
       if (el.btnHairToggle) {
-        el.btnHairToggle.addEventListener('click', toggleLanHair);
+        bindReliableTap(el.btnHairToggle, toggleLanHair);
       }
       if (el.btnGrpHair) {
-        el.btnGrpHair.addEventListener('click', cycleSelectedGroupHair);
+        bindReliableTap(el.btnGrpHair, cycleSelectedGroupHair);
       }
       if (el.btnToSignToggle) {
         el.btnToSignToggle.addEventListener('click', () => {
@@ -4518,6 +4804,7 @@
 
       // Stage canvas drag & selection in Group Free-Posing Mode
       stageCanvas.addEventListener('touchstart', (e) => {
+        if (e.target !== stageCanvas) return;
         if (!state.isGroupMode || state.mode !== 'AIMING') return;
         state.stageLastTouchTs = Date.now();
         if (e.touches && e.touches[0]) {
@@ -4548,6 +4835,7 @@
       });
 
       stageCanvas.addEventListener('mousedown', (e) => {
+        if (e.target !== stageCanvas) return;
         if (Date.now() - state.stageLastTouchTs < 500) return;
         if (!state.isGroupMode || state.mode !== 'AIMING') return;
         if (e.button !== undefined && e.button !== 0) return;
@@ -4842,6 +5130,7 @@
       refreshCollectionUI();
       applyBackgroundLabel();
       applyMuteState();
+      syncGameModeUI();
       syncSettingsUI();
       if (AlbumManager && typeof AlbumManager.onChange === 'function') {
         AlbumManager.onChange(() => {
@@ -4875,6 +5164,7 @@
       enterFromTicket,
       openStartScreen,
       renewTicket,
+      setGameMode,
       toggleLanHair,
       selectMember,
       selectGroupMode,

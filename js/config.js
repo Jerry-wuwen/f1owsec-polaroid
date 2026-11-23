@@ -227,7 +227,7 @@
   ChekiGame.BACKGROUNDS = BACKGROUNDS;
 
   ChekiGame.CONFIG = {
-    ASSET_VERSION: '20261123',
+    ASSET_VERSION: '20261123e',
     CANVAS_WIDTH: 270,
     CANVAS_HEIGHT: 480,
     STAGE_SCALE: 2,
@@ -290,6 +290,7 @@
     NICKNAME_STORAGE_KEY: 'f1owsec_nickname_v1',
     HAIR_PREF_STORAGE_KEY: 'f1owsec_hair_pref_v1',
     GROUP_GUIDE_STORAGE_KEY: 'f1owsec_group_guide_seen_v1',
+    GAME_MODE_STORAGE_KEY: 'f1owsec_game_mode_v1',
 
     ALBUM: {
       storageKey: 'f1owsec_cheki_album_v2',

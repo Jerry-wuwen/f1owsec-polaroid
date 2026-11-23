@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0916">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>限时60秒的拍立得 · F1owSec 特典会拍切模拟器</title>
-  <link rel="stylesheet" href="./style.css?v=20261124">
+  <link rel="stylesheet" href="./style.css?v=20261123e">
 </head>
 <body>
   <div id="app" data-member="member_1">
@@ -266,6 +266,17 @@
         </div>
 
         <div class="settings-list">
+          <div class="setting-row setting-row-col">
+            <div class="setting-info">
+              <span class="setting-label">游玩模式</span>
+              <span class="setting-desc">简单模式：顺序循环动作 · 快门必出 PERFECT</span>
+            </div>
+            <div class="settings-mode-group" role="radiogroup" aria-label="游玩模式切换">
+              <button id="btn-settings-mode-standard" class="pixel-btn mode-opt-btn is-active" type="button" data-game-mode="standard" aria-pressed="true">标准模式</button>
+              <button id="btn-settings-mode-easy" class="pixel-btn mode-opt-btn" type="button" data-game-mode="easy" aria-pressed="false">简单模式</button>
+            </div>
+          </div>
+
           <div class="setting-row">
             <div class="setting-info">
               <span class="setting-label">GBA 液晶微扫描线</span>
@@ -342,6 +353,11 @@
           <input id="nickname-input" class="ticket-input" type="text" maxlength="10" autocomplete="off" placeholder="输入你的昵称（用于拍立得 To 签，可留空）">
         </label>
 
+        <div class="ticket-mode-switch" role="radiogroup" aria-label="选择游玩模式">
+          <button id="btn-ticket-mode-standard" class="pixel-btn mode-opt-btn is-active" type="button" data-game-mode="standard" aria-pressed="true">标准模式</button>
+          <button id="btn-ticket-mode-easy" class="pixel-btn mode-opt-btn" type="button" data-game-mode="easy" aria-pressed="false">简单模式</button>
+        </div>
+
         <button id="btn-enter-ticket" class="pixel-btn ticket-enter-btn" type="button">检票入场</button>
         <div class="ticket-guide-text">昵称可留空 · 进度与相册自动保存在本机</div>
       </div>
@@ -350,13 +366,13 @@
     <div id="global-toast" class="global-toast hidden" role="status"></div>
   </div>
 
-  <script src="./js/config.js?v=20261123"></script>
-  <script src="./js/audio.js?v=20261123"></script>
-  <script src="./js/pixelFilter.js?v=20261123"></script>
-  <script src="./js/assets.js?v=20261123"></script>
-  <script src="./js/poses.js?v=20261123"></script>
-  <script src="./js/stickers.js?v=20261123"></script>
-  <script src="./js/album.js?v=20261123"></script>
-  <script src="./js/main.js?v=20261123"></script>
+  <script src="./js/config.js?v=20261123e"></script>
+  <script src="./js/audio.js?v=20261123e"></script>
+  <script src="./js/pixelFilter.js?v=20261123e"></script>
+  <script src="./js/assets.js?v=20261123e"></script>
+  <script src="./js/poses.js?v=20261123e"></script>
+  <script src="./js/stickers.js?v=20261123e"></script>
+  <script src="./js/album.js?v=20261123e"></script>
+  <script src="./js/main.js?v=20261123e"></script>
 </body>
 </html>
