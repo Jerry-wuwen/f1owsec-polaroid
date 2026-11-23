@@ -2941,6 +2941,9 @@
 
     function enterFromTicket() {
       if (state.enteringTicket) return;
+      if (AudioManager && typeof AudioManager.unlockAndStartBgm === 'function') {
+        AudioManager.unlockAndStartBgm();
+      }
 
       if (el.nicknameInput) {
         const cleanNick = String(el.nicknameInput.value || '').trim().slice(0, 10);
@@ -4597,6 +4600,21 @@
     }
 
     function bindEvents() {
+      if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+        const onFirstUserGesture = () => {
+          if (typeof document.removeEventListener === 'function') {
+            document.removeEventListener('pointerdown', onFirstUserGesture, true);
+            document.removeEventListener('touchstart', onFirstUserGesture, true);
+            document.removeEventListener('click', onFirstUserGesture, true);
+          }
+          if (AudioManager && typeof AudioManager.unlockAndStartBgm === 'function') {
+            AudioManager.unlockAndStartBgm();
+          }
+        };
+        document.addEventListener('pointerdown', onFirstUserGesture, { capture: true, passive: true });
+        document.addEventListener('touchstart', onFirstUserGesture, { capture: true, passive: true });
+        document.addEventListener('click', onFirstUserGesture, { capture: true, passive: true });
+      }
       if (el.btnEnterTicket) {
         el.btnEnterTicket.addEventListener('click', enterFromTicket);
       }

@@ -2,29 +2,289 @@
   'use strict';
 
   const ChekiGame = global.ChekiGame || (global.ChekiGame = {});
+  const DEFAULT_BGM_VOLUME = 0.38;
 
   class PixelAudioManager {
     constructor() {
       this._ctx = null;
-      this._muted = false;
+      this._muted = this._loadMutedPref();
       this._noiseBuffer = null;
+
+      this._bgmGain = null;
+      this._introBuffer = null;
+      this._loopBuffer = null;
+      this._introSource = null;
+      this._loopSource = null;
+      this._bgmLoadPromise = null;
+      this._bgmFailed = false;
+      this._bgmStarted = false;
+      this._pendingBgmStart = false;
+      this._lastScheduled = null;
+      this._visibilityBound = false;
+
+      this._bindVisibilityListener();
     }
 
-    _ensureContext() {
-      if (this._muted) return null;
+    _getMuteStorageKey() {
+      return (ChekiGame.CONFIG && ChekiGame.CONFIG.AUDIO_MUTE_STORAGE_KEY) || 'f1owsec_audio_muted_v1';
+    }
+
+    _loadMutedPref() {
+      try {
+        if (typeof global.localStorage !== 'undefined' && global.localStorage) {
+          return global.localStorage.getItem(this._getMuteStorageKey()) === '1';
+        }
+      } catch (_err) {
+        // Ignore storage read errors
+      }
+      return false;
+    }
+
+    _saveMutedPref(muted) {
+      try {
+        if (typeof global.localStorage !== 'undefined' && global.localStorage) {
+          global.localStorage.setItem(this._getMuteStorageKey(), muted ? '1' : '0');
+        }
+      } catch (_err) {
+        // Ignore storage write errors
+      }
+    }
+
+    _bindVisibilityListener() {
+      if (this._visibilityBound) return;
+      if (typeof global.document === 'undefined' || typeof global.document.addEventListener !== 'function') {
+        return;
+      }
+      this._visibilityBound = true;
+      this._onVisibilityChange = () => {
+        this._handleVisibilityChange();
+      };
+      global.document.addEventListener('visibilitychange', this._onVisibilityChange);
+    }
+
+    _handleVisibilityChange() {
+      if (!this._ctx) return;
+      try {
+        if (global.document && global.document.hidden) {
+          if (typeof this._ctx.suspend === 'function') {
+            const p = this._ctx.suspend();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          }
+        } else if (!this._muted) {
+          if (typeof this._ctx.resume === 'function') {
+            const p = this._ctx.resume();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+          }
+          if (this._pendingBgmStart && !this._bgmStarted && this._introBuffer && this._loopBuffer) {
+            this._pendingBgmStart = false;
+            this._startSeamlessBgm(this._ctx);
+          }
+        }
+      } catch (_err) {
+        // Ignore visibility suspend/resume errors
+      }
+    }
+
+    _ensureContext(allowWhenMuted) {
+      if (this._muted && !allowWhenMuted) return null;
       try {
         if (!this._ctx) {
           const AudioCtx = global.AudioContext || global.webkitAudioContext;
           if (!AudioCtx) return null;
           this._ctx = new AudioCtx();
         }
-        if (this._ctx.state === 'suspended' && typeof this._ctx.resume === 'function') {
-          this._ctx.resume().catch(() => {});
+        if (!this._muted && this._ctx.state === 'suspended' && typeof this._ctx.resume === 'function') {
+          const p = this._ctx.resume();
+          if (p && typeof p.catch === 'function') {
+            p.catch(() => {});
+          }
         }
         return this._ctx;
       } catch (_err) {
         return null;
       }
+    }
+
+    _ensureBgmGain(ctx) {
+      if (!ctx) return null;
+      if (!this._bgmGain && typeof ctx.createGain === 'function') {
+        this._bgmGain = ctx.createGain();
+        if (typeof this._bgmGain.connect === 'function' && ctx.destination) {
+          this._bgmGain.connect(ctx.destination);
+        }
+      }
+      this._applyBgmGain();
+      return this._bgmGain;
+    }
+
+    _applyBgmGain() {
+      if (!this._bgmGain || !this._bgmGain.gain) return;
+      const target = this._muted ? 0 : DEFAULT_BGM_VOLUME;
+      try {
+        if (this._ctx && typeof this._bgmGain.gain.setValueAtTime === 'function') {
+          this._bgmGain.gain.setValueAtTime(target, this._ctx.currentTime || 0);
+        }
+        this._bgmGain.gain.value = target;
+      } catch (_err) {
+        // Ignore gain automation errors
+      }
+    }
+
+    _decodeAudioData(ctx, arrayBuffer) {
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const onOk = (buf) => {
+          if (!settled) {
+            settled = true;
+            resolve(buf);
+          }
+        };
+        const onErr = (err) => {
+          if (!settled) {
+            settled = true;
+            reject(err || new Error('decodeAudioData failed'));
+          }
+        };
+        try {
+          const maybePromise = ctx.decodeAudioData(arrayBuffer, onOk, onErr);
+          if (maybePromise && typeof maybePromise.then === 'function') {
+            maybePromise.then(onOk, onErr);
+          }
+        } catch (err) {
+          onErr(err);
+        }
+      });
+    }
+
+    _fetchAndDecode(ctx, url) {
+      if (typeof global.fetch !== 'function') {
+        return Promise.reject(new Error('fetch unavailable'));
+      }
+      return global.fetch(url)
+        .then((res) => {
+          if (!res || !res.ok) {
+            throw new Error(`Audio fetch failed: ${res ? res.status : 'unknown'}`);
+          }
+          return res.arrayBuffer();
+        })
+        .then((arrayBuf) => this._decodeAudioData(ctx, arrayBuf));
+    }
+
+    _loadBgmBuffers(ctx) {
+      if (this._introBuffer && this._loopBuffer) {
+        return Promise.resolve(true);
+      }
+      if (this._bgmFailed) {
+        return Promise.resolve(false);
+      }
+      if (this._bgmLoadPromise) {
+        return this._bgmLoadPromise;
+      }
+
+      const ver = (ChekiGame.CONFIG && ChekiGame.CONFIG.ASSET_VERSION) || '20261123g';
+      const introUrl = `./assets/audio/bgm_intro.wav?v=${encodeURIComponent(ver)}`;
+      const loopUrl = `./assets/audio/bgm_loop.wav?v=${encodeURIComponent(ver)}`;
+
+      this._bgmLoadPromise = Promise.all([
+        this._fetchAndDecode(ctx, introUrl),
+        this._fetchAndDecode(ctx, loopUrl)
+      ]).then(([introBuf, loopBuf]) => {
+        this._introBuffer = introBuf;
+        this._loopBuffer = loopBuf;
+        return Boolean(introBuf && loopBuf);
+      }).catch(() => {
+        // Silent graceful fallback if audio assets fail to load or decode
+        this._bgmFailed = true;
+        this._bgmLoadPromise = null;
+        return false;
+      });
+
+      return this._bgmLoadPromise;
+    }
+
+    _stopBgmSources() {
+      [this._introSource, this._loopSource].forEach((src) => {
+        if (!src) return;
+        try {
+          src.onended = null;
+          if (typeof src.stop === 'function') src.stop(0);
+          if (typeof src.disconnect === 'function') src.disconnect();
+        } catch (_err) {
+          // Ignore already-stopped source errors
+        }
+      });
+      this._introSource = null;
+      this._loopSource = null;
+    }
+
+    _startSeamlessBgm(ctx) {
+      if (!ctx || this._bgmStarted || !this._introBuffer || !this._loopBuffer) return;
+      const gainNode = this._ensureBgmGain(ctx);
+      if (!gainNode) return;
+
+      try {
+        this._stopBgmSources();
+
+        const startTime = (ctx.currentTime || 0) + 0.04;
+        const introDur = Math.max(0, Number(this._introBuffer.duration) || 0);
+        const loopStartTime = startTime + introDur;
+
+        const introSource = ctx.createBufferSource();
+        introSource.buffer = this._introBuffer;
+        introSource.loop = false;
+        introSource.connect(gainNode);
+        introSource.onended = () => {
+          if (this._introSource === introSource) {
+            this._introSource = null;
+          }
+        };
+
+        const loopSource = ctx.createBufferSource();
+        loopSource.buffer = this._loopBuffer;
+        loopSource.loop = true;
+        loopSource.connect(gainNode);
+
+        introSource.start(startTime);
+        loopSource.start(loopStartTime);
+
+        this._introSource = introSource;
+        this._loopSource = loopSource;
+        this._bgmStarted = true;
+        this._lastScheduled = { startTime, loopStartTime, introDuration: introDur };
+      } catch (_err) {
+        this._bgmStarted = false;
+      }
+    }
+
+    unlockAndStartBgm() {
+      if (this._muted) return Promise.resolve(false);
+      const ctx = this._ensureContext(false);
+      if (!ctx) return Promise.resolve(false);
+
+      this._ensureBgmGain(ctx);
+      if (this._bgmStarted || this._bgmFailed) {
+        return Promise.resolve(this._bgmStarted);
+      }
+
+      if (this._introBuffer && this._loopBuffer) {
+        if (typeof global.document !== 'undefined' && global.document.hidden) {
+          this._pendingBgmStart = true;
+          return Promise.resolve(false);
+        }
+        this._startSeamlessBgm(ctx);
+        return Promise.resolve(this._bgmStarted);
+      }
+
+      return this._loadBgmBuffers(ctx).then((ok) => {
+        if (!ok || this._bgmStarted) return this._bgmStarted;
+        const hidden = typeof global.document !== 'undefined' && Boolean(global.document.hidden);
+        if (this._muted || hidden) {
+          this._pendingBgmStart = true;
+          return false;
+        }
+        this._startSeamlessBgm(ctx);
+        return this._bgmStarted;
+      });
     }
 
     _getNoiseBuffer(ctx) {
@@ -99,11 +359,20 @@
 
     setMuted(muted) {
       this._muted = Boolean(muted);
+      this._saveMutedPref(this._muted);
+      this._applyBgmGain();
+      if (!this._muted) {
+        this._ensureContext(false);
+        this._applyBgmGain();
+        if (!this._bgmStarted) {
+          this.unlockAndStartBgm();
+        }
+      }
       return this._muted;
     }
 
     toggleMute() {
-      this._muted = !this._muted;
+      this.setMuted(!this._muted);
       if (!this._muted) {
         this.playUiClick();
       }
